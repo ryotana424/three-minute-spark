@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0d0c0b">
+  <title>KICKSTART</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    /* ═══════════════════════════════════════════
+       CSS変数 — 段階ごとに上書きされるテーマ
+    ═══════════════════════════════════════════ */
+    :root {
+      --bg:       #0d0c0b;
+      --surface:  #1a1714;
+      --border:   #2a2420;
+      --accent:   #c44b0a;
+      --accent2:  #e06020;
+      --glow-col: rgba(196,75,10,0.5);
+      --ash:      #8a7a6e;
+      --white:    #f0e8e0;
+      --green:    #3d9e6a;
+      --danger:   #b03010;
+      --radius:   14px;
+    }
+
+    /* ROUND 2: 加速 */
+    .phase-2 {
+      --accent:   #e85d04;
+      --accent2:  #f48c06;
+      --glow-col: rgba(232,93,4,0.65);
+      --surface:  #1e1610;
+      --border:   #33240f;
+    }
+
+    /* ROUND 3: 全力 */
+    .phase-3 {
+      --accent:   #faa307;
+      --accent2:  #ffba08;
+      --glow-col: rgba(250,163,7,0.82);
+      --surface:  #201800;
+      --border:   #3d2e00;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html {
+      height: 100%;
+      /* iOSのバウンススクロール防止 */
+      overflow: hidden;
+      overscroll-behavior: none;
+    }
+
+    body {
+      min-height: 100%; min-height: 100dvh;
+      background: var(--bg);
+      color: var(--white);
+      font-family: 'Noto Serif JP', serif;
+      overflow-y: auto;
+      overscroll-behavior: none;
+      -webkit-font-smoothing: antialiased;
+      transition: background 0.9s ease;
+      /* iOSセーフエリア対応 */
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+
+    /* タッチ操作最適化 */
+    button {
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    /* ── Canvas ── */
+    #canvas {
+      position: fixed; inset: 0;
+      pointer-events: none; z-index: 0;
+    }
+
+    /* ── ノイズ ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+      pointer-events: none; z-index: 1;
+    }
+
+    #app {
+      position: relative; z-index: 2;
+      min-height: 100dvh;
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px 0;
+    }
+
+    /* ── カード共通 ── */
+    .card {
+      width: min(460px, 94vw);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 36px 28px;
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.03),
+        0 0 60px var(--glow-col),
+        0 24px 60px rgba(0,0,0,0.7);
+      position: relative; overflow: hidden;
+      transition: background 0.9s, border-color 0.9s, box-shadow 0.9s;
+    }
+
+    /* スマホでは上下パディングを詰める */
+    @media (max-height: 700px) {
+      .card { padding: 24px 22px; }
+    }
+    .card::after {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      transition: background 0.9s;
+    }
+
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .screen.active .card {
+      animation: fadeUp 0.36s cubic-bezier(0.22,1,0.36,1) both;
+    }
+
+    /* ════════════════════════════
+       共通パーツ
+    ════════════════════════════ */
+    .eyebrow {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 16px;
+      display: flex; align-items: center; gap: 8px;
+      transition: color 0.9s;
+    }
+    .eyebrow::before {
+      content: ''; display: block;
+      width: 18px; height: 1px;
+      background: var(--accent); transition: background 0.9s;
+    }
+
+    .btn-primary {
+      display: block; width: 100%;
+      padding: 18px 24px;
+      /* iOSズーム防止のため16px以上 */
+      background: var(--accent); color: #fff;
+      border: none; border-radius: 10px;
+      font-family: 'Noto Serif JP', serif;
+      font-size: 17px; font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s, box-shadow 0.2s;
+      box-shadow: 0 4px 24px var(--glow-col);
+      position: relative; overflow: hidden; letter-spacing: 0.04em;
+      /* タップターゲット最低44px */
+      min-height: 54px;
+    }
+    .btn-primary::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.14) 0%, transparent 55%);
+    }
+    @media (hover: hover) {
+      .btn-primary:hover { background: var(--accent2); transform: translateY(-2px); box-shadow: 0 8px 32px var(--glow-col); }
+    }
+    .btn-primary:active { background: var(--accent2); transform: scale(0.98); }
+
+    .btn-done {
+      display: block; width: 100%; padding: 16px 16px;
+      background: var(--green); color: #fff;
+      border: none; border-radius: 9px;
+      font-family: 'Noto Serif JP', serif;
+      font-size: 16px; font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      box-shadow: 0 3px 18px rgba(61,158,106,0.35);
+      min-height: 52px;
+    }
+    @media (hover: hover) { .btn-done:hover { opacity: 0.87; transform: translateY(-1px); } }
+    .btn-done:active { opacity: 0.8; transform: scale(0.98); }
+
+    .btn-secondary {
+      display: block; width: 100%; padding: 14px 16px;
+      background: transparent; color: var(--ash);
+      border: 1px solid var(--border); border-radius: 9px;
+      font-family: 'Noto Serif JP', serif;
+      font-size: 14px; font-weight: 400;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+      min-height: 48px;
+    }
+    @media (hover: hover) { .btn-secondary:hover { border-color: var(--ash); color: var(--white); transform: translateY(-1px); } }
+    .btn-secondary:active { border-color: var(--ash); color: var(--white); background: rgba(255,255,255,0.04); }
+
+    .btn-cta {
+      display: block; width: 100%; padding: 17px;
+      background: var(--accent); color: #fff;
+      border: none; border-radius: 9px;
+      font-family: 'Noto Serif JP', serif;
+      font-size: 16px; font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s, box-shadow 0.2s;
+      box-shadow: 0 4px 22px var(--glow-col);
+      position: relative; overflow: hidden;
+      min-height: 52px;
+    }
+    .btn-cta::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.14) 0%, transparent 55%);
+    }
+    @media (hover: hover) { .btn-cta:hover { background: var(--accent2); transform: translateY(-2px); } }
+    .btn-cta:active { background: var(--accent2); transform: scale(0.98); }
+
+    /* ════════════════════════════
+       スタート画面
+    ════════════════════════════ */
+    #startScreen h1 {
+      font-size: clamp(28px, 7vw, 44px);
+      font-weight: 900; line-height: 1.1;
+      letter-spacing: -0.025em; margin-bottom: 4px;
+    }
+    #startScreen h1 .app-name {
+      color: var(--accent);
+      font-size: clamp(36px, 9vw, 56px);
+      display: block;
+      transition: color 0.9s;
+    }
+
+    #startScreen .tagline {
+      font-size: 14px; color: var(--ash);
+      margin-bottom: 10px; letter-spacing: 0.01em;
+    }
+
+    #startScreen .desc {
+      font-size: 13px; line-height: 1.85; color: var(--ash);
+      margin-bottom: 28px;
+      padding: 12px 14px;
+      border-left: 2px solid var(--accent);
+      background: rgba(0,0,0,0.2);
+      border-radius: 0 6px 6px 0;
+      transition: border-color 0.9s;
+    }
+
+    .stats-row {
+      display: flex; margin-top: 28px;
+      padding-top: 22px; border-top: 1px solid var(--border);
+      transition: border-color 0.9s;
+    }
+    .stat { flex: 1; text-align: center; }
+    .stat + .stat { border-left: 1px solid var(--border); }
+    .stat-num {
+      font-family: 'Space Mono', monospace;
+      font-size: 20px; font-weight: 700;
+      color: var(--accent2); transition: color 0.9s;
+    }
+    .stat-label { font-size: 10px; color: var(--ash); margin-top: 4px; letter-spacing: 0.06em; }
+
+    /* ════════════════════════════
+       タイマー画面
+    ════════════════════════════ */
+    .phase-banner {
+      display: flex; align-items: center;
+      justify-content: space-between; margin-bottom: 22px;
+    }
+
+    .step-dots { display: flex; gap: 6px; }
+    .dot {
+      height: 5px; border-radius: 3px;
+      background: var(--border);
+      transition: background 0.4s, width 0.4s, box-shadow 0.4s; width: 24px;
+    }
+    .dot.active { width: 34px; background: var(--accent); box-shadow: 0 0 8px var(--glow-col); }
+    .dot.done { background: var(--accent2); }
+
+    .phase-tag {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px; letter-spacing: 0.14em;
+      padding: 3px 10px; border-radius: 20px;
+      border: 1px solid var(--accent); color: var(--accent);
+      transition: border-color 0.9s, color 0.9s;
+    }
+
+    .task-label {
+      font-family: 'Space Mono', monospace;
+      font-size: 10px; letter-spacing: 0.18em;
+      color: var(--accent); text-transform: uppercase;
+      margin-bottom: 10px; transition: color 0.9s;
+    }
+
+    .task-text {
+      font-size: clamp(18px, 4.5vw, 23px); font-weight: 700;
+      line-height: 1.45; color: var(--white);
+      margin-bottom: 8px; min-height: 56px;
+      display: flex; align-items: center;
+      transition: opacity 0.2s;
+    }
+    .task-text.fade { opacity: 0; }
+
+    .task-evidence {
+      font-size: 12px; line-height: 1.7; color: var(--ash);
+      margin-bottom: 14px;
+      padding: 8px 12px;
+      background: rgba(0,0,0,0.2);
+      border-left: 2px solid var(--accent);
+      border-radius: 0 6px 6px 0;
+      transition: opacity 0.2s, border-color 0.9s;
+      min-height: 20px;
+    }
+    .task-evidence.fade { opacity: 0; }
+
+    /* 入力欄 */
+    .note-wrap { margin-bottom: 18px; }
+    .note-label { font-size: 12px; color: var(--ash); margin-bottom: 6px; letter-spacing: 0.04em; }
+    .note-area {
+      width: 100%;
+      background: rgba(0,0,0,0.25); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--white);
+      font-family: 'Noto Serif JP', serif;
+      /* iOSの自動ズームを防ぐため16px */
+      font-size: 16px; line-height: 1.6;
+      padding: 12px 14px; resize: none; outline: none; height: 72px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      -webkit-appearance: none;
+    }
+    .note-area::placeholder { color: var(--ash); opacity: 0.5; }
+    .note-area:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--glow-col); }
+
+    /* タイマーリング — スマホ縦向きに最適化 */
+    .timer-wrap {
+      display: flex; align-items: center;
+      justify-content: center; gap: 20px; margin-bottom: 20px;
+    }
+    .timer-svg { width: 100px; height: 100px; transform: rotate(-90deg); flex-shrink: 0; }
+    .timer-track { fill: none; stroke: var(--border); stroke-width: 5; }
+    .timer-ring {
+      fill: none; stroke: var(--accent); stroke-width: 5;
+      stroke-linecap: round; stroke-dasharray: 376.99; stroke-dashoffset: 0;
+      transition: stroke-dashoffset 1s linear, stroke 0.9s;
+      filter: drop-shadow(0 0 7px var(--glow-col));
+    }
+    .timer-ring.urgent { stroke: var(--danger) !important; }
+
+    .timer-info { flex: 1; }
+    .timer-num {
+      font-family: 'Space Mono', monospace;
+      font-size: 38px; font-weight: 700;
+      letter-spacing: -0.03em; color: var(--white);
+      line-height: 1; display: block; margin-bottom: 4px;
+      transition: color 0.3s;
+    }
+    .timer-num.urgent { color: var(--danger) !important; }
+    .timer-sub { font-size: 11px; color: var(--ash); letter-spacing: 0.06em; }
+
+    .btn-group { display: flex; flex-direction: column; gap: 10px; }
+
+    /* ════════════════════════════
+       完了画面
+    ════════════════════════════ */
+    .finish-icon {
+      font-size: 52px; text-align: center; margin-bottom: 14px;
+      animation: engineRev 1.8s ease-in-out infinite;
+    }
+    @keyframes engineRev {
+      0%,100% { transform: scale(1) rotate(-1deg); }
+      40%      { transform: scale(1.1) rotate(1.5deg); }
+      70%      { transform: scale(1.06) rotate(-0.5deg); }
+    }
+
+    #finishScreen h2 {
+      font-size: clamp(24px, 6vw, 32px); font-weight: 900;
+      text-align: center; letter-spacing: -0.025em; margin-bottom: 8px;
+    }
+    #finishScreen h2 span { color: var(--accent); }
+
+    .finish-desc {
+      text-align: center; color: var(--ash);
+      font-size: 13px; line-height: 1.85; margin-bottom: 26px;
+    }
+
+    .history-list { margin-bottom: 24px; display: flex; flex-direction: column; gap: 6px; }
+    .history-item {
+      display: flex; align-items: flex-start; gap: 10px;
+      background: rgba(0,0,0,0.2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 14px; font-size: 13px;
+    }
+    .history-step {
+      font-family: 'Space Mono', monospace; font-size: 10px;
+      color: var(--accent); padding: 2px 7px;
+      border: 1px solid var(--accent); border-radius: 10px;
+      white-space: nowrap; flex-shrink: 0; margin-top: 1px;
+      transition: color 0.9s, border-color 0.9s;
+    }
+    .history-body { flex: 1; }
+    .history-task { color: var(--white); margin-bottom: 3px; }
+    .history-note { color: var(--ash); font-size: 12px; font-style: italic; }
+
+    .btn-group-finish { display: flex; flex-direction: column; gap: 8px; }
+
+    /* 段階遷移フラッシュ */
+    @keyframes phaseFlash {
+      0%   { opacity: 0; }
+      15%  { opacity: 0.2; }
+      100% { opacity: 0; }
+    }
+    .phase-flash {
+      position: fixed; inset: 0; z-index: 100;
+      background: var(--accent); pointer-events: none;
+      animation: phaseFlash 0.55s ease-out both;
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<div id="app">
+
+  <!-- ── スタート画面 ── -->
+  <div id="startScreen" class="screen active">
+    <div class="card">
+      <div class="eyebrow">3-minute engine warm-up</div>
+      <h1>
+        エンジンを<br>かけろ。
+        <span class="app-name">KICKSTART</span>
+      </h1>
+      <p class="tagline">本番前の3分間ルーティン</p>
+      <p class="desc">
+        脳は「動き出した事実」に反応する。<br>
+        小さな行動を1つ完了するだけで<br>
+        ドーパミンが出て、次が動きやすくなる。<br>
+        これがsmall winの力。<br>
+        3分で3つやれば、エンジンはかかってる。
+      </p>
+      <button class="btn-primary" onclick="startSession()">▶ エンジンスタート</button>
+      <div class="stats-row">
+        <div class="stat">
+          <div class="stat-num" id="totalSessions">0</div>
+          <div class="stat-label">起動回数</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num" id="totalTasks">0</div>
+          <div class="stat-label">完了タスク</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num" id="streak">0</div>
+          <div class="stat-label">連続日数</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── タイマー画面 ── -->
+  <div id="timerScreen" class="screen">
+    <div class="card">
+      <div class="phase-banner">
+        <div class="step-dots">
+          <div class="dot active" id="dot0"></div>
+          <div class="dot"       id="dot1"></div>
+          <div class="dot"       id="dot2"></div>
+        </div>
+        <div class="phase-tag" id="phaseTag">ROUND 1 — ウォームアップ</div>
+      </div>
+
+      <div class="task-label" id="taskLabel">まずこれをやる</div>
+      <div class="task-text" id="taskText">—</div>
+      <div class="task-evidence" id="taskEvidence"></div>
+
+      <div class="note-wrap" id="noteWrap" style="display:none">
+        <div class="note-label" id="noteLabel">ここに書いてください</div>
+        <textarea class="note-area" id="noteArea" placeholder="なんでも一言でOK"></textarea>
+      </div>
+
+      <div class="timer-wrap">
+        <svg class="timer-svg" viewBox="0 0 130 130">
+          <circle class="timer-track" cx="65" cy="65" r="60"/>
+          <circle class="timer-ring"  cx="65" cy="65" r="60" id="timerRing"/>
+        </svg>
+        <div class="timer-info">
+          <span class="timer-num" id="timerNum">03:00</span>
+          <span class="timer-sub" id="timerSub">残り時間</span>
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn-done"      onclick="handleDone()">✅ 完了した</button>
+        <button class="btn-secondary" onclick="handleSkip()">🔄 別のタスクにする</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 完了画面 ── -->
+  <div id="finishScreen" class="screen">
+    <div class="card">
+      <div class="finish-icon">🚀</div>
+      <h2>エンジン<span>全開</span></h2>
+      <p class="finish-desc">
+        3つ動けた。エンジンはもうかかってる。<br>
+        本番タスクに今すぐ飛び込もう。
+      </p>
+      <div class="history-list" id="historyList"></div>
+      <div class="btn-group-finish">
+        <button class="btn-cta"       onclick="goMain()">🎯 本番タスクを今すぐやる</button>
+        <button class="btn-secondary" onclick="startSession()">🔁 もう1セット</button>
+        <button class="btn-secondary" onclick="goMain()">✅ 今日はここまで</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════
+     炎パーティクル
+══════════════════════════════════ -->
+<script>
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d');
+
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+resize();
+window.addEventListener('resize', resize);
+
+const PHASE_CONFIG = [
+  { count: 55,  speed: 0.75, size: 2.2, opacity: 0.28, hue: [8, 22] },
+  { count: 100, speed: 1.2,  size: 2.8, opacity: 0.42, hue: [15, 32] },
+  { count: 160, speed: 1.8,  size: 3.5, opacity: 0.55, hue: [22, 45] },
+];
+
+let currentPhaseConfig = PHASE_CONFIG[0];
+let particles = [];
+
+class Particle {
+  constructor() { this.reset(true); }
+  reset(init = false) {
+    const c = currentPhaseConfig;
+    this.x = Math.random() * canvas.width;
+    this.y = init ? Math.random() * canvas.height : canvas.height + 8;
+    this.vx = (Math.random() - 0.5) * 0.7;
+    this.vy = -(Math.random() * c.speed + 0.35);
+    this.life = 0;
+    this.maxLife = Math.random() * 180 + 80;
+    this.r = Math.random() * c.size + 0.8;
+    this.cfg = c;
+  }
+  update() {
+    this.x += this.vx + Math.sin(this.life * 0.05) * 0.35;
+    this.y += this.vy;
+    this.life++;
+    if (this.life >= this.maxLife || this.y < -10) this.reset();
+  }
+  draw() {
+    const t = this.life / this.maxLife;
+    const a = (t < 0.2 ? t / 0.2 : 1 - (t - 0.2) / 0.8) * this.cfg.opacity;
+    const h = this.cfg.hue[0] + t * (this.cfg.hue[1] - this.cfg.hue[0]);
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r * (1 - t * 0.4), 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${h},96%,62%,${a})`;
+    ctx.fill();
+  }
+}
+
+function buildParticles() {
+  particles = Array.from({ length: currentPhaseConfig.count }, () => new Particle());
+}
+buildParticles();
+
+function setPhaseParticles(phase) {
+  currentPhaseConfig = PHASE_CONFIG[Math.min(phase, 2)];
+  while (particles.length < currentPhaseConfig.count) particles.push(new Particle());
+}
+
+(function loop() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  particles.forEach(p => { p.update(); p.draw(); });
+  requestAnimationFrame(loop);
+})();
+</script>
+
+<!-- ══════════════════════════════════
+     アプリロジック
+══════════════════════════════════ -->
+<script>
+const TASKS = {
+  /* ── ROUND 1: ウォームアップ（体・感覚系・エビデンスベース） ── */
+  easy: [
+    { text: "コップ1杯の水を飲む",
+      evidence: "軽度の脱水（体重の1〜2%）でも注意力・記憶力が低下することが示されている。水分補給で認知機能を正常に戻せる。",
+      note: false },
+    { text: "スクワットを10回やる",
+      evidence: "短時間の筋力運動後にBDNF（脳由来神経栄養因子）とドーパミンが増加し、集中力・学習効率が高まることが確認されている。",
+      note: false },
+    { text: "ジャンピングジャックを20回やる（両足を開きながら両手を頭上でたたく動作）",
+      evidence: "短時間の有酸素運動でノルエピネフリンが分泌され、覚醒レベルと注意機能が即座に向上する。",
+      note: false },
+    { text: "その場で足踏みを60秒する",
+      evidence: "軽度の有酸素運動でも前頭前野への血流が増加し、実行機能とワーキングメモリが改善することが示されている。",
+      note: false },
+    { text: "生理的ため息を5回する（鼻から2回に分けて大きく吸い、口からゆっくり吐く）",
+      evidence: "二段階吸気＋長い呼気は肺胞を開き、迷走神経を活性化する。不安・緊張を素早く下げながら覚醒を維持できる。",
+      note: false },
+    { text: "鼻から4秒吸って、4秒止めて、4秒で吐く（ボックス呼吸）を3回する",
+      evidence: "米海軍SEALsも採用するボックス呼吸は、自律神経を整えてストレス反応を抑制し、集中状態に入りやすくする。",
+      note: false },
+    { text: "冷水で顔と手首を30秒洗ってくる",
+      evidence: "冷刺激が交感神経を活性化し、覚醒・注意が即時向上する。冷たい刺激は「ダイビング反射」を通じて心拍と血圧を調整する。",
+      note: false },
+    { text: "窓の近くで外の光を30秒浴びる",
+      evidence: "朝の明るい光（青色光含む）がコルチゾールとセロトニン分泌を促し、概日リズムを安定させ日中の覚醒を持続させる。",
+      note: false },
+    { text: "背筋を伸ばし、胸を張った姿勢で30秒キープする",
+      evidence: "前傾・猫背姿勢はネガティブ思考・疲労感と相関することが研究で示されている。直立姿勢は自己効力感と集中力を高める。",
+      note: false },
+    { text: "肩を後ろに大きく10回まわして首・肩をほぐす",
+      evidence: "頸部・肩の筋緊張は頸動脈の血流を妨げる可能性がある。ほぐすことで脳への血流が改善され認知パフォーマンスが上がる。",
+      note: false },
+    { text: "首を左・右・前・後ろにゆっくり各5秒ストレッチする",
+      evidence: "頸部の柔軟性と認知機能には関連があり、首の緊張を解放することで脳への血流と神経伝達が改善される。",
+      note: false },
+    { text: "壁に手をついてふくらはぎを左右30秒ずつ伸ばす",
+      evidence: "ふくらはぎは「第二の心臓」と呼ばれ、ストレッチで静脈還流が促進され、全身・脳への血流が改善する。",
+      note: false },
+    { text: "両腕を上に伸ばして全身を10秒大きくストレッチする（×3回）",
+      evidence: "全身伸展ストレッチは筋肉の血流を促し、デスクワーク後に滞った循環を回復させる。深呼吸との組み合わせで効果が増す。",
+      note: false },
+    { text: "腰をゆっくり大きく左右に10回まわす",
+      evidence: "体幹まわりの筋肉をほぐすことで姿勢が整い、長時間座位による腰部の緊張が解放され、集中維持に必要な体勢を作れる。",
+      note: false },
+    { text: "目を閉じて20〜30秒、何も考えずにただ座る",
+      evidence: "短時間のマインドフルレストがデフォルトモードネットワークをリセットし、その後の注意力・創造性が向上することが示されている。",
+      note: false },
+    { text: "手首をぐるぐると前後に10回ずつまわしてほぐす",
+      evidence: "手首・前腕の緊張はタイピング・マウス操作の精度を下げる。ほぐすことで末梢血流が改善し手先の感覚が鋭くなる。",
+      note: false },
+    { text: "足の指をグーパーと10回動かす",
+      evidence: "足趾の運動は足底からの固有感覚フィードバックを活性化し、体の覚醒状態を高める。長時間の着座後に特に効果的。",
+      note: false },
+    { text: "深く息を吸いながら両腕を広げ、吐きながらゆっくり下ろす（×5回）",
+      evidence: "横隔膜を使った深呼吸は迷走神経を刺激し、副交感神経を活性化する。過剰な緊張を取り除き集中に適した状態を作る。",
+      note: false },
+    { text: "立ち上がってその場で30秒間、ゆっくり歩く",
+      evidence: "歩行は左右交互の律動的運動で小脳・大脳基底核を活性化し、着席前より集中状態に入りやすくなることが確認されている。",
+      note: false },
+    { text: "目のまわりを指の腹で30秒優しくマッサージする",
+      evidence: "眼輪筋の緊張はスクリーン疲労の主因の一つ。マッサージで眼周囲の血流が改善し、視覚的注意の精度が回復する。",
+      note: false },
+  ],
+
+  /* ── ROUND 2: 加速（体・感覚系強化＋思考の言語化） ── */
+  medium: [
+    { text: "スクワットを20回やる",
+      evidence: "ROUND 1より回数を増やすことでBDNF分泌量がさらに増加。運動強度と認知機能向上には用量反応関係があることが示されている。",
+      note: false },
+    { text: "ジャンピングジャックを40回やる（両足を開きながら両手を頭上でたたく動作）",
+      evidence: "中強度の有酸素運動は前頭前野の実行機能を最も効率よく高める。40回で心拍数が上がり覚醒レベルが最適ゾーンに入る。",
+      note: false },
+    { text: "その場で足踏みを90秒する",
+      evidence: "1〜2分の有酸素運動で海馬への血流が増加し、記憶の符号化と想起が向上することが神経画像研究で確認されている。",
+      note: false },
+    { text: "腕立て伏せを10回やる",
+      evidence: "上半身の筋力運動は下半身と同様にカテコールアミン（ドーパミン・ノルエピネフリン）を分泌させ、集中力と動機づけを高める。",
+      note: false },
+    { text: "その場で軽くジョギング（足踏み）を60秒、最後の10秒は全力で走る",
+      evidence: "高強度インターバルの短いバーストが、持続的な中強度運動より注意機能を速く高めることが研究で示されている。",
+      note: false },
+    { text: "冷水で顔・手首・首の後ろを45秒しっかり洗ってくる",
+      evidence: "首の後ろへの冷刺激は頸動脈周囲の温度受容体を直接刺激し、脳幹の覚醒中枢を活性化する。ROUND 1より広範囲に刺激を与える。",
+      note: false },
+    { text: "ボックス呼吸（4秒吸う→4秒止める→4秒吐く→4秒止める）を5回する",
+      evidence: "ボックス呼吸を5回以上続けることで心拍変動（HRV）が改善し、前頭前野の制御機能が向上することが示されている。",
+      note: false },
+    { text: "生理的ため息（鼻から2回に分けて大きく吸い、口からゆっくり吐く）を10回する",
+      evidence: "繰り返すことで肺内CO₂濃度が低下し、血液のpHが適切に保たれる。10回で副交感神経の活性化効果が安定して持続する。",
+      note: false },
+    { text: "壁に背中をつけて、腰・肩・後頭部が壁につく正しい立ち姿勢を60秒キープする",
+      evidence: "正しい姿勢のキープは脊柱起立筋を活性化し、体幹の固有感覚フィードバックが脳の覚醒レベルを高めることが示されている。",
+      note: false },
+    { text: "腰をゆっくり大きく左右に20回まわす",
+      evidence: "体幹の回旋運動は脊柱周囲の血流を改善し、長時間着座で生じる腰部の筋緊張を解放する。回数を増やすほど効果が高まる。",
+      note: false },
+    { text: "全身を使って大きく伸びを5回繰り返す（吸いながら伸び、吐きながら脱力）",
+      evidence: "全身伸展と深呼吸の組み合わせは筋紡錘と横隔膜を同時に刺激し、交感神経と副交感神経のバランスを最適化する。",
+      note: false },
+    { text: "今の気分を一言、メモ帳に書く",
+      evidence: "感情の言語化（アフェクトラベリング）は扁桃体の過活動を抑制し、前頭前野の制御機能を回復させることが神経科学的に示されている。",
+      note: true, noteLabel: "今の気分を書いてください" },
+    { text: "今感じているモヤモヤを1文、メモ帳に書く",
+      evidence: "頭の中にある未整理の思考を外に書き出すことで認知的負荷が減り、ワーキングメモリに空きが生まれる（認知的オフロード効果）。",
+      note: true, noteLabel: "モヤモヤを書いてください" },
+    { text: "今日やらないことを1つ決めて、メモ帳に書く",
+      evidence: "やらないことを明示的に決めることで選択肢を減らし、意思決定疲れを防ぐ。制約が創造性と集中力を高めることも示されている。",
+      note: true, noteLabel: "やらないことを書いてください" },
+    { text: "今日の最重要タスクを1つだけ決めて、メモ帳に書く",
+      evidence: "1つに絞る行為がプレフロンタルコルテクスを活性化し、その後の注意資源を優先タスクに集中させる準備ができる。",
+      note: true, noteLabel: "最重要タスクを書いてください" },
+    { text: "今日終わらせたいことを3つ、メモ帳に箇条書きする",
+      evidence: "具体的な実行意図（いつ・何をするか）を書き出すことでタスク達成率が大幅に上がることがGollwitzer(1999)の研究で示されている。",
+      note: true, noteLabel: "3つ書いてください" },
+    { text: "今日の気分を0〜10点で採点して、メモ帳に書く",
+      evidence: "自分の状態を数値化することでメタ認知が促進される。状態の自己認識は感情調節と集中力の維持に直結する。",
+      note: true, noteLabel: "0〜10点で書いてください" },
+    { text: "今週のゴールを1行、メモ帳に書く",
+      evidence: "目標を書き出すことで達成確率が高まる（Dominicaの研究では書いた目標は書かない目標より42%達成されやすい）。",
+      note: true, noteLabel: "今週のゴールを書いてください" },
+    { text: "集中できない原因を1つ、メモ帳に書く",
+      evidence: "問題を外在化して言語化することで、漠然とした不安が具体的な課題に変わり対処可能になる。書くことで頭が整理される。",
+      note: true, noteLabel: "原因を書いてください" },
+    { text: "どこに詰まっているかを1文、メモ帳に書く",
+      evidence: "詰まりを言語化する行為（プロブレム・ステートメント）は解決策を見つけやすくする。問題を書くだけで脳が自動的に解を探し始める。",
+      note: true, noteLabel: "詰まっているポイントを書いてください" },
+  ],
+
+  /* ── ROUND 3: 全力（体・感覚系MAX＋思考の具体化） ── */
+  hard: [
+    { text: "スクワットを30回やる",
+      evidence: "30回の連続スクワットは中強度の有酸素運動に相当し、前頭前野の実行機能が最大限に高まる強度ゾーンに到達する。",
+      note: false },
+    { text: "ジャンピングジャックを60回やる（両足を開きながら両手を頭上でたたく動作）",
+      evidence: "60回で心拍数が最大心拍数の60〜70%に達し、BDNFとドーパミンの分泌が最大化されるゾーンに入る。",
+      note: false },
+    { text: "腕立て伏せを15〜20回やる",
+      evidence: "上半身の筋力運動を限界近くまで行うことで、全身のカテコールアミン分泌が最大化され、集中力・意欲が大幅に高まる。",
+      note: false },
+    { text: "バーピーを10回やる（しゃがむ→足を後ろに伸ばす→腕立て→戻る→ジャンプ）",
+      evidence: "バーピーは全身の筋肉を使う複合運動で、短時間で最大の有酸素・無酸素効果を得られる。運動後30分は認知パフォーマンスが向上する。",
+      note: false },
+    { text: "その場で全力ダッシュの動き（足踏み）を20秒、休憩10秒を3セットする",
+      evidence: "タバタ式インターバルトレーニングは4分間で持久力と認知機能を同時に向上させる。20秒全力+10秒休憩の繰り返しが最も効果的。",
+      note: false },
+    { text: "プランク（うつ伏せで肘とつま先だけで体を支える）を60秒キープする",
+      evidence: "体幹の等尺性収縮は深層筋の固有感覚受容器を刺激し、姿勢制御と注意の安定性を高める。60秒で体幹が適度に活性化される。",
+      note: false },
+    { text: "冷水で顔・手首・首の後ろを60秒しっかり洗い、鏡で目を見て「やるぞ」と言う",
+      evidence: "冷水刺激に加え、自己肯定的なセルフトークは自己効力感を高め、パフォーマンスへの期待感を上げることが示されている。",
+      note: false },
+    { text: "窓の外か屋外で明るい光を1分浴びながら、深呼吸を5回する",
+      evidence: "光刺激と深呼吸の組み合わせはセロトニンとコルチゾールの分泌を相乗的に促し、覚醒と気分の安定を同時に達成できる。",
+      note: false },
+    { text: "全身ストレッチ（首→肩→腕→腰→足）を各部位10秒ずつ順番に行う",
+      evidence: "系統的なストレッチは全身の血流を段階的に改善する。部位を順番に行うことで体の状態への注意が高まりマインドフルネス効果も得られる。",
+      note: false },
+    { text: "次にやることの最初の一手を、メモ帳に具体的に書く",
+      evidence: "「最初の一手」を書き出す行為は実行意図（implementation intention）を形成し、行動開始のハードルを劇的に下げる。",
+      note: true, noteLabel: "最初の一手を書いてください" },
+    { text: "今日必ず終わらせることを1つ決めて、メモ帳に書く",
+      evidence: "1つのコミットメントを明文化することで達成動機が高まる。書いた目標は脳が「未完了」として認識し、完了まで注意を向け続ける。",
+      note: true, noteLabel: "必ず終わらせることを書いてください" },
+    { text: "今日の成功イメージを1文、メモ帳に書く",
+      evidence: "メンタルコントラスト（成功イメージと現実のギャップを意識する）は目標達成率を高める。イメージを書くことで動機づけが強化される。",
+      note: true, noteLabel: "成功イメージを書いてください" },
+    { text: "本命タスクの最初の一手を、メモ帳に書く",
+      evidence: "具体的なアクションプランを書き出すことで前頭前野が活性化される。「何をするか」が明確になるだけで実行率が大きく上がる。",
+      note: true, noteLabel: "最初の一手を書いてください" },
+    { text: "本命タスクで一番怖いことを1つ、メモ帳に書く",
+      evidence: "回避している不安を言語化すると扁桃体の反応が低下する（アフェクトラベリング）。書くだけで恐怖が和らぎ行動しやすくなる。",
+      note: true, noteLabel: "怖いことを書いてください" },
+    { text: "今日解決したい課題を1文で整理して、メモ帳に書く",
+      evidence: "問題を1文に凝縮する行為は課題の本質を明確にし、解決策を探す脳の検索範囲を絞り込む効果がある。",
+      note: true, noteLabel: "課題を1文で書いてください" },
+    { text: "本命タスクのアウトラインを3行だけ書く",
+      evidence: "アウトライン作成は作業記憶の負荷を外部化し、実際の作業に使える認知リソースを最大化する。3行という制約が思考を鋭くする。",
+      note: true, noteLabel: "アウトラインを書いてください" },
+    { text: "詰まっている箇所を、人に説明するつもりで1文書く",
+      evidence: "ラバーダック・デバッグとして知られる手法。説明しようとする行為が問題を客観化し、自分で解決策に気づくことが多い。",
+      note: true, noteLabel: "説明文を書いてください" },
+    { text: "今日の終わりにどんな状態でいたいかを書く",
+      evidence: "目標状態を具体的にイメージすることで行動の方向性が定まる。プロセスより結果状態を書く方が動機づけ効果が高いことが示されている。",
+      note: true, noteLabel: "理想の状態を書いてください" },
+    { text: "昨日の振り返りを1文、メモ帳に書く",
+      evidence: "短い振り返り（リフレクション）はメタ認知を促進し、同じミスの繰り返しを防ぐ。書くことで学習が定着しやすくなる。",
+      note: true, noteLabel: "昨日の振り返りを書いてください" },
+    { text: "今日のリスクを1つだけ考えて、メモ帳に書く",
+      evidence: "事前に障害を想定する「if-then計画」は計画外の事態への対処能力を高め、集中が途切れる原因を事前に排除できる。",
+      note: true, noteLabel: "リスクを書いてください" },
+  ],
+};
+
+const PHASE_LABELS = [
+  { tag: 'ROUND 1 — ウォームアップ', hint: 'まずこれをやる' },
+  { tag: 'ROUND 2 — 加速',           hint: '少し深く入る'   },
+  { tag: 'ROUND 3 — 全力',           hint: 'もう動けてる'   },
+];
+const PHASE_CLASSES = ['', 'phase-2', 'phase-3'];
+const PHASE_POOLS   = ['easy', 'medium', 'hard'];
+
+const TOTAL    = 3;
+const DURATION = 180;
+const circumference = 2 * Math.PI * 60;
+
+let currentTask    = null;
+let completedCount = 0;
+let timerSeconds   = DURATION;
+let timerInterval  = null;
+let history        = [];
+
+/* ─── ストレージ ─── */
+function loadStats() {
+  const s = JSON.parse(localStorage.getItem('spark_stats') || '{}');
+  document.getElementById('totalSessions').textContent = s.sessions || 0;
+  document.getElementById('totalTasks').textContent    = s.tasks    || 0;
+  document.getElementById('streak').textContent        = calcStreak(s);
+}
+
+function saveSession() {
+  const s = JSON.parse(localStorage.getItem('spark_stats') || '{}');
+  s.sessions = (s.sessions || 0) + 1;
+  s.tasks    = (s.tasks    || 0) + completedCount;
+  s.dates    = s.dates || [];
+  const today = new Date().toISOString().slice(0, 10);
+  if (!s.dates.includes(today)) s.dates.push(today);
+  localStorage.setItem('spark_stats', JSON.stringify(s));
+}
+
+function calcStreak(s) {
+  if (!s.dates || !s.dates.length) return 0;
+  const dates = s.dates.map(d => new Date(d)).sort((a,b) => b-a);
+  const today = new Date(); today.setHours(0,0,0,0);
+  let streak = 0, cur = today;
+  for (const d of dates) {
+    const dd = new Date(d); dd.setHours(0,0,0,0);
+    if (dd.getTime() === cur.getTime()) { streak++; cur.setDate(cur.getDate()-1); }
+    else if (dd < cur) break;
+  }
+  return streak;
+}
+
+/* ─── 画面切替 ─── */
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+/* ─── フェーズUI ─── */
+function applyPhase(phase) {
+  document.body.className = PHASE_CLASSES[phase];
+  document.getElementById('phaseTag').textContent  = PHASE_LABELS[phase].tag;
+  document.getElementById('taskLabel').textContent = PHASE_LABELS[phase].hint;
+  setPhaseParticles(phase);
+}
+
+function flashTransition() {
+  const el = document.createElement('div');
+  el.className = 'phase-flash';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 650);
+}
+
+/* ─── タスク ─── */
+function getRandomTask(phase) {
+  const pool = TASKS[PHASE_POOLS[phase]].filter(t => t !== currentTask);
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function setTask(task) {
+  currentTask = task;
+  const el  = document.getElementById('taskText');
+  const ev  = document.getElementById('taskEvidence');
+  el.classList.add('fade');
+  ev.classList.add('fade');
+  setTimeout(() => {
+    el.textContent = `「${task.text}」`;
+    el.classList.remove('fade');
+    if (task.evidence) {
+      ev.textContent = task.evidence;
+      ev.style.display = 'block';
+    } else {
+      ev.style.display = 'none';
+    }
+    ev.classList.remove('fade');
+    const nw = document.getElementById('noteWrap');
+    const na = document.getElementById('noteArea');
+    const nl = document.getElementById('noteLabel');
+    if (task.note) {
+      nl.textContent = task.noteLabel || 'ここに書いてください';
+      na.value = '';
+      nw.style.display = 'block';
+    } else {
+      nw.style.display = 'none';
+    }
+  }, 200);
+}
+
+/* ─── ドット ─── */
+function updateDots() {
+  for (let i = 0; i < TOTAL; i++) {
+    const dot = document.getElementById(`dot${i}`);
+    dot.className = 'dot';
+    if (i < completedCount) dot.classList.add('done');
+    if (i === completedCount) dot.classList.add('active');
+  }
+}
+
+/* ─── タイマー ─── */
+function updateTimerUI() {
+  const mins = String(Math.floor(timerSeconds / 60)).padStart(2, '0');
+  const secs = String(timerSeconds % 60).padStart(2, '0');
+  const numEl  = document.getElementById('timerNum');
+  const ringEl = document.getElementById('timerRing');
+  const subEl  = document.getElementById('timerSub');
+  numEl.textContent = `${mins}:${secs}`;
+  const offset = circumference * (1 - timerSeconds / DURATION);
+  ringEl.style.strokeDashoffset = offset;
+  const urgent = timerSeconds <= 30;
+  numEl.classList.toggle('urgent', urgent);
+  ringEl.classList.toggle('urgent', urgent);
+  subEl.textContent = urgent ? '⚡ ラストスパート' : '残り時間';
+}
+
+function startTimer() {
+  clearInterval(timerInterval);
+  timerSeconds = DURATION;
+  updateTimerUI();
+  timerInterval = setInterval(() => {
+    if (timerSeconds > 0) { timerSeconds--; updateTimerUI(); }
+    else { clearInterval(timerInterval); handleDone(); }
+  }, 1000);
+}
+
+function stopTimer() { clearInterval(timerInterval); timerInterval = null; }
+
+/* ─── 完了 ─── */
+function handleDone() {
+  stopTimer();
+  const note = document.getElementById('noteArea').value.trim();
+  history.push({ task: currentTask, note, phase: completedCount });
+  completedCount++;
+
+  if (completedCount >= TOTAL) {
+    saveSession();
+    renderHistory();
+    showScreen('finishScreen');
+  } else {
+    updateDots();
+    flashTransition();
+    applyPhase(completedCount);
+    setTask(getRandomTask(completedCount));
+    startTimer();
+  }
+}
+
+/* ─── スキップ ─── */
+function handleSkip() {
+  stopTimer();
+  setTask(getRandomTask(completedCount));
+  startTimer();
+}
+
+/* ─── 履歴 ─── */
+function renderHistory() {
+  document.getElementById('historyList').innerHTML = history.map(h => {
+    const label = PHASE_LABELS[h.phase].tag.split(' — ')[1];
+    const noteHtml = h.note ? `<div class="history-note">「${h.note}」</div>` : '';
+    return `<div class="history-item">
+      <div class="history-step">${label}</div>
+      <div class="history-body">
+        <div class="history-task">✅ ${h.task.text}</div>
+        ${noteHtml}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ─── セッション開始 ─── */
+function startSession() {
+  completedCount = 0; history = []; currentTask = null;
+  document.getElementById('noteArea').value = '';
+  applyPhase(0);
+  updateDots();
+  setTask(getRandomTask(0));
+  showScreen('timerScreen');
+  startTimer();
+}
+
+/* ─── トップへ ─── */
+function goMain() {
+  stopTimer();
+  document.body.className = '';
+  loadStats();
+  showScreen('startScreen');
+}
+
+loadStats();
+</script>
+
+</body>
+</html>
